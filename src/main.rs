@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::fmt;
+use std::{collections::HashMap, env, fmt, fs};
 
 pub enum JSONValue {
     Number(f64),
@@ -90,8 +89,7 @@ impl<'a> JSON<'a> {
         match self.cur_tok {
             '{' => self.parse_object(),
             '[' => self.parse_array(),
-            't' | 'f' => self.parse_bool(),
-            'n' => self.parse_null(),
+            't' | 'f' | 'n' => self.parse_literal(),
             '"' => self.parse_string(),
             '0'..='9' => self.parse_number(),
             c => panic!("Unexpected token \"{}\" at start of JSON value.", c),
@@ -102,6 +100,7 @@ impl<'a> JSON<'a> {
         let mut map = HashMap::new();
         self.expect('{');
         if self.cur_tok == '}' {
+            self.next_tok();
             return JSONValue::Object(map);
         }
         loop {
@@ -127,6 +126,7 @@ impl<'a> JSON<'a> {
         let mut arr = Vec::new();
         self.expect('[');
         if self.cur_tok == ']' {
+            self.next_tok();
             return JSONValue::Array(arr);
         }
         loop {
@@ -162,24 +162,29 @@ impl<'a> JSON<'a> {
         JSONValue::String(s)
     }
 
-    fn parse_bool(&mut self) -> JSONValue {
-        const FALSE: &str = "false";
-        const TRUE: &str = "true";
+    fn parse_literal(&mut self) -> JSONValue {
+        const FALSE: &str = "alse";
+        const TRUE: &str = "rue";
+        const NULL: &str = "ull";
         let biter = self.iter.by_ref();
-        JSONValue::Bool(match self.cur_tok {
-            't' => biter.take(TRUE.len()).eq(TRUE.chars()),
-            'f' => !biter.take(FALSE.len()).eq(FALSE.chars()),
-            _ => panic!("Unexpected token in boolean literal."),
-        })
-    }
-
-    fn parse_null(&mut self) -> JSONValue {
-        const NULL: &str = "null";
-        let passed = self.iter.by_ref().take(NULL.len()).eq(NULL.chars());
-        if !passed {
-            panic!("Unexpected token in null literal.")
+        match self.cur_tok {
+            't' => {
+                assert!(biter.take(TRUE.len()).eq(TRUE.chars()));
+                self.next_tok();
+                JSONValue::Bool(true)
+            }
+            'f' => {
+                assert!(biter.take(FALSE.len()).eq(FALSE.chars()));
+                self.next_tok();
+                JSONValue::Bool(false)
+            }
+            'n' => {
+                assert!(biter.take(NULL.len()).eq(NULL.chars()));
+                self.next_tok();
+                JSONValue::Null
+            }
+            _ => panic!("Unexpected literal."),
         }
-        JSONValue::Null
     }
 
     fn parse(&mut self) -> JSONValue {
@@ -188,7 +193,7 @@ impl<'a> JSON<'a> {
 }
 
 fn main() {
-    let input =
-        "{\"hello\": 55, \"hello\": [\"kek\", {\"hello\": [\"kek\", 22.4 ]} ] }";
-    println!("{}", JSON::new(input).parse());
+    let fname = env::args().nth(1).expect("Must pass filename to parse.");
+    let input = fs::read_to_string(fname).unwrap();
+    println!("{}", JSON::new(input.as_str()).parse());
 }
