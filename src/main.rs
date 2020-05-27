@@ -1,11 +1,15 @@
-use std::{collections::HashMap, env, fmt, fs};
+use std::{
+    collections::{BTreeMap, HashMap, LinkedList},
+    env, fmt, fs,
+    time::Instant,
+};
 
 pub enum JSONValue {
     Number(f64),
     String(String),
     Bool(bool),
-    Array(Vec<JSONValue>),
-    Object(HashMap<String, JSONValue>),
+    Array(LinkedList<JSONValue>),
+    Object(BTreeMap<String, JSONValue>),
     Null,
 }
 
@@ -19,6 +23,9 @@ impl JSONValue {
                 repr
             }
             JSONValue::Object(map) => {
+                if map.len() == 0 {
+                    return "{}".to_string();
+                }
                 let indstrend = (0..indent).map(|_| "  ").collect::<String>();
                 let repr = map
                     .iter()
@@ -35,6 +42,9 @@ impl JSONValue {
                 format!("{{\n{}\n{}}}", repr, indstrend)
             }
             JSONValue::Array(arr) => {
+                if arr.len() == 0 {
+                    return "[]".to_string();
+                }
                 let indstrend = (0..indent).map(|_| "  ").collect::<String>();
                 let repr = arr
                     .iter()
@@ -56,6 +66,10 @@ impl fmt::Display for JSONValue {
         write!(f, "{}", repr)
     }
 }
+
+const FALSE: &str = "alse";
+const TRUE: &str = "rue";
+const NULL: &str = "ull";
 
 struct JSON<'a> {
     iter: std::str::Chars<'a>,
@@ -80,7 +94,7 @@ impl<'a> JSON<'a> {
 
     fn expect(&mut self, ch: char) -> () {
         if self.cur_tok != ch {
-            panic!("Unexpected token {}. Expected {}.", self.cur_tok, ch);
+            format!("Unexpected token {}. Expected {}.", self.cur_tok, ch);
         }
         self.next_tok();
     }
@@ -91,13 +105,13 @@ impl<'a> JSON<'a> {
             '[' => self.parse_array(),
             't' | 'f' | 'n' => self.parse_literal(),
             '"' => self.parse_string(),
-            '0'..='9' => self.parse_number(),
+            '0'..='9' | '-' => self.parse_number(),
             c => panic!("Unexpected token \"{}\" at start of JSON value.", c),
         }
     }
 
     fn parse_object(&mut self) -> JSONValue {
-        let mut map = HashMap::new();
+        let mut map = BTreeMap::new();
         self.expect('{');
         if self.cur_tok == '}' {
             self.next_tok();
@@ -123,7 +137,7 @@ impl<'a> JSON<'a> {
     }
 
     fn parse_array(&mut self) -> JSONValue {
-        let mut arr = Vec::new();
+        let mut arr = LinkedList::new();
         self.expect('[');
         if self.cur_tok == ']' {
             self.next_tok();
@@ -131,7 +145,7 @@ impl<'a> JSON<'a> {
         }
         loop {
             let value = self.parse_any();
-            arr.push(value);
+            arr.push_back(value);
             let c = self.cur_tok;
             self.next_tok();
             match c {
@@ -147,7 +161,7 @@ impl<'a> JSON<'a> {
         let mut s = self.cur_tok.to_string();
         loop {
             let t = self.next_tok();
-            if !t.is_ascii_digit() && t != '.' {
+            if !t.is_ascii_digit() && t != '.' && t != '-' {
                 break;
             }
             s.push(t);
@@ -163,9 +177,6 @@ impl<'a> JSON<'a> {
     }
 
     fn parse_literal(&mut self) -> JSONValue {
-        const FALSE: &str = "alse";
-        const TRUE: &str = "rue";
-        const NULL: &str = "ull";
         let biter = self.iter.by_ref();
         match self.cur_tok {
             't' => {
@@ -187,7 +198,7 @@ impl<'a> JSON<'a> {
         }
     }
 
-    fn parse(&mut self) -> JSONValue {
+    pub fn parse(&mut self) -> JSONValue {
         self.parse_any()
     }
 }
@@ -195,5 +206,10 @@ impl<'a> JSON<'a> {
 fn main() {
     let fname = env::args().nth(1).expect("Must pass filename to parse.");
     let input = fs::read_to_string(fname).unwrap();
-    println!("{}", JSON::new(input.as_str()).parse());
+    let t = Instant::now();
+    let p = JSON::new(input.as_str()).parse();
+    println!("time: {}ms", t.elapsed().as_micros() as f64 / 1000f64);
+    if let JSONValue::Array(list) = p {
+        println!("Len: {}", list.len());
+    }
 }
