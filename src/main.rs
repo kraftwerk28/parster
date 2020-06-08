@@ -1,5 +1,6 @@
+use regex::Regex;
 use std::{
-    collections::{BTreeMap, HashMap, LinkedList},
+    collections::{BTreeMap, LinkedList},
     env, fmt, fs,
     time::Instant,
 };
@@ -58,6 +59,32 @@ impl JSONValue {
         };
         r
     }
+
+    //     pub fn from_path(&self, path: &str) -> &Self {
+    //         let re = Regex::new(r".(\w+)|\[(\d+)\]").unwrap();
+    //         for c in re.captures_iter(path) {
+    //             println!("{:?}", c.get(1).unwrap().as_str());
+    //         }
+    //         match self {
+    //             JSONValue::Object(map) => self,
+    //             JSONValue::Array(arr) => self,
+    //             _ => self,
+    //         }
+    //     }
+
+    //     fn get_by_key(&self, path: &str) -> Option<&Self> {
+    //         match self {
+    //             JSONValue::Object(map) => Some(self),
+    //             JSONValue::Array(arr) => {
+    //                 if let Ok(n) = path.parse::<usize>() {
+    //                     Some(arr.iter().nth(n).unwrap())
+    //                 } else {
+    //                     None
+    //                 }
+    //             }
+    //             _ => None,
+    //         }
+    //     }
 }
 
 impl fmt::Display for JSONValue {
@@ -74,17 +101,23 @@ const NULL: &str = "ull";
 struct JSON<'a> {
     iter: std::str::Chars<'a>,
     cur_tok: char,
+    pos: usize,
 }
 
 impl<'a> JSON<'a> {
     pub fn new(input: &'a str) -> Self {
         let mut iter = input.chars();
         let cur_tok = iter.next().unwrap();
-        Self { iter, cur_tok }
+        Self {
+            iter,
+            cur_tok,
+            pos: 0,
+        }
     }
 
     fn next_tok(&mut self) -> char {
         let t = self.iter.next().unwrap_or('\0');
+        self.pos += 1;
         if t.is_ascii_whitespace() {
             return self.next_tok();
         }
@@ -160,11 +193,12 @@ impl<'a> JSON<'a> {
     fn parse_number(&mut self) -> JSONValue {
         let mut s = self.cur_tok.to_string();
         loop {
-            let t = self.next_tok();
-            if !t.is_ascii_digit() && t != '.' && t != '-' {
-                break;
+            match self.next_tok() {
+                t if t.is_ascii_digit() || t == '.' => {
+                    s.push(t);
+                }
+                _ => break,
             }
-            s.push(t);
         }
         JSONValue::Number(s.parse::<f64>().unwrap())
     }
@@ -203,13 +237,33 @@ impl<'a> JSON<'a> {
     }
 }
 
+// struct Test {
+//     foo: i32,
+//     bar: String,
+// }
+
+// macro_rules! mac {
+//     ($x: ty, $($key: ident, $val: expr), *) => {
+//         $x {
+//             $($key: $val, )*
+//         }
+//     };
+// }
+
 fn main() {
     let fname = env::args().nth(1).expect("Must pass filename to parse.");
     let input = fs::read_to_string(fname).unwrap();
     let t = Instant::now();
     let p = JSON::new(input.as_str()).parse();
     println!("time: {}ms", t.elapsed().as_micros() as f64 / 1000f64);
-    if let JSONValue::Array(list) = p {
+    // p.from_path("asdf");
+    if let JSONValue::Array(list) = &p {
         println!("Len: {}", list.len());
+    }
+    if let JSONValue::Object(map) = &p {
+        let deps = map.get("dependencies").unwrap();
+        if let JSONValue::Object(map_) = &deps {
+            println!("Map len: {}", map_.len());
+        }
     }
 }
